@@ -12,6 +12,8 @@ import { HumanMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { DynamicTool, tool } from "@langchain/core/tools";
 import { ERC20Plugin } from './plugins/ERC20Plugin';
+import { StartupEvaluationPlugin } from './plugins/StartupEvaluationPlugin';
+import { AttestationPlugin } from './plugins/AttestationPlugin';
 
 export class AgenticPlatform {
   private agent: Agent;
@@ -76,7 +78,9 @@ async function main() {
   await platform.registerClient(new TerminalClient());
   await Promise.all([
     platform.registerPlugin(new SearchPlugin()),
-    platform.registerPlugin(new ERC20Plugin())
+    platform.registerPlugin(new ERC20Plugin()),
+    platform.registerPlugin(new StartupEvaluationPlugin())
+    //platform.registerPlugin(new AttestationPlugin())
   ]);
   
   await platform.start();
