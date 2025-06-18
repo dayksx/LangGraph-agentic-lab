@@ -29,7 +29,7 @@ export class AgenticPlatform {
   public async registerClient(client: Client): Promise<void> {
     await client.initialize();
     this.clients.set(client.config.name, client);
-    
+
     client.onMessage(async (message) => {
       const response = await this.agent.processMessage([message]);
       await client.sendMessage(response);
@@ -73,19 +73,19 @@ export class AgenticPlatform {
 // Example usage
 async function main() {
   const platform = new AgenticPlatform();
-  
+
   // Register clients and plugins
   await platform.registerClient(new TerminalClient());
   await Promise.all([
     platform.registerPlugin(new SearchPlugin()),
     platform.registerPlugin(new ERC20Plugin()),
-    platform.registerPlugin(new StartupEvaluationPlugin())
-    //platform.registerPlugin(new AttestationPlugin())
+    platform.registerPlugin(new StartupEvaluationPlugin()),
+    platform.registerPlugin(new AttestationPlugin())
   ]);
-  
+
   await platform.start();
 }
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(console.error);
 }
