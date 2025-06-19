@@ -8,11 +8,12 @@ import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
 import { Runnable } from "@langchain/core/runnables";
 import { ChatOpenAICallOptions } from "@langchain/openai";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
+import { Plugin } from "../plugins/Plugin.js";
 
 export interface AgentConfig {
   modelName: string;
   temperature: number;
-  tools: DynamicTool[];
+  tools?: DynamicTool[];
   maxContextMessages?: number;
 }
 
@@ -20,16 +21,16 @@ export class Agent {
   private model!: Runnable<BaseLanguageModelInput, AIMessageChunk, ChatOpenAICallOptions>;
   private workflow: any;
   private tools: DynamicTool[];
+  private plugins: Map<string, Plugin> = new Map();
   private modelConfig: { modelName: string; temperature: number };
 
   constructor(config: AgentConfig) {
-    this.tools = config.tools;
+    this.tools = config.tools || [];
     this.modelConfig = {
       modelName: config.modelName,
       temperature: config.temperature,
     };
     
-    // Initialize model with initial tools
     this.initializeModel();
     this.workflow = this.createWorkflow();
   }
@@ -47,6 +48,20 @@ export class Agent {
     this.initializeModel();
     // Recreate workflow with new tools
     this.workflow = this.createWorkflow();
+  }
+
+  public async registerPlugin(plugin: Plugin): Promise<void> {
+    await plugin.initialize();
+    this.plugins.set(plugin.config.name, plugin);
+    // Add plugin tools to this specific agent
+    this.addTools(plugin.tools);
+  }
+
+  public async cleanup(): Promise<void> {
+    // Cleanup all plugins for this agent
+    for (const plugin of this.plugins.values()) {
+      await plugin.cleanup();
+    }
   }
 
   private createWorkflow(): any {
