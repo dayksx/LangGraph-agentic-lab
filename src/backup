@@ -1,0 +1,29 @@
+const AgentState = Annotation.Root({
+    messages: Annotation<BaseMessage[]>({
+      reducer: (x, y) => x.concat(y),
+      default: () => [],
+    }),
+    nextAgent: Annotation<string>({
+      reducer: (x, y) => y ?? x ?? "oracle",
+      default: () => "oracle",
+    }),
+  });
+
+  const selectionPrompt = ChatPromptTemplate.fromMessages([
+    ["system", `You are an expert at selecting the most relevant agent based on the user's input.
+      Depending on the request, choose the appropriate agent and respond ONLY with its name:
+      
+      - If the user asks to perform an onchain transaction, respond with: "degen"
+      - If the user shares information about a Web3 project or startup, respond with: "analyst"
+      - If the user asks a general or unrelated question, respond with: "oracle"
+      
+      Only reply with one of the following: "degen", "analyst", or "oracle". Do not add any explanation or extra text.`],
+    new MessagesPlaceholder("messages"),
+]);
+
+const result = selectionPrompt.pipe(new ChatOpenAI({
+  model: "gpt-4o-mini",
+  temperature: 0,
+}));
+
+const response = await result.invoke({ messages: state.messages });

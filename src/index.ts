@@ -3,6 +3,7 @@ import { Agent, AgentConfig } from './core/Agent.js';
 import { Client } from './clients/Client.js';
 import { Plugin } from './plugins/Plugin.js';
 import { AppConfig, defaultConfig } from './config/config.js';
+import { agentPersonas } from './config/personas.js';
 import { SearchPlugin } from './plugins/SearchPlugin.js';
 import { TerminalClient } from './clients/TerminalClient.js';
 import { ERC20Plugin } from './plugins/ERC20Plugin.js';
@@ -10,6 +11,8 @@ import { StartupEvaluationPlugin } from './plugins/StartupEvaluationPlugin.js';
 import { AttestationPlugin } from './plugins/AttestationPlugin.js';
 import { WorkflowManager } from './core/WorkflowManager.js';
 import { StateGraph } from '@langchain/langgraph';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts.js';
+import { ChatOpenAI } from '@langchain/openai';
 
 export class AgenticPlatform {
   private workflowManager: WorkflowManager;
@@ -70,23 +73,26 @@ export class AgenticPlatform {
 async function main() {
   const platform = new AgenticPlatform();
   
-  // Register agents
+  // Register agents with unique personas
   await platform.registerAgent("analyst", {
     modelName: "gpt-4",
     temperature: 0.7,
-    tools: []
+    tools: [],
+    persona: agentPersonas.analyst
   });
   
   await platform.registerAgent("degen", {
     modelName: "gpt-4",
-    temperature: 0.7,
-    tools: []
+    temperature: 0.9,
+    tools: [],
+    persona: agentPersonas.degen
   });
   
   await platform.registerAgent("oracle", {
     modelName: "gpt-4",
-    temperature: 0.7,
-    tools: []
+    temperature: 0.5,
+    tools: [],
+    persona: agentPersonas.oracle
   });
   
   // Register plugins for specific agents
@@ -101,13 +107,15 @@ async function main() {
   await platform.defineWorkflow((graph) => {
     graph
       .addNode("Analyst", async (state) => {
+        // The Analyst agent is able to evaluate any web3 startups, protocols and tokens
         const agent = platform.getAgent("analyst");
         if (!agent) throw new Error("Analyst agent not found");
         const messages = Array.isArray(state.messages) ? state.messages : [state.messages];
         const response = await agent.processMessage(messages);
-        return { messages: [response] };
+        return { messages: [response] }; 
       })
       .addNode("Degen", async (state) => {
+        // The Degen agent is able to do onchain transactions, reading, and answering questions about web3 startups and tokens, or any other questions that are related to the other agents.
         const agent = platform.getAgent("degen");
         if (!agent) throw new Error("Degen agent not found");
         const messages = Array.isArray(state.messages) ? state.messages : [state.messages];
@@ -115,6 +123,7 @@ async function main() {
         return { messages: [response] };
       })
       .addNode("Oracle", async (state) => {
+        // The Oracle agent is able to answer any questions about everything, and has a knowledge base of all the information in the world.
         const agent = platform.getAgent("oracle");
         if (!agent) throw new Error("Oracle agent not found");
         const messages = Array.isArray(state.messages) ? state.messages : [state.messages];
@@ -123,8 +132,10 @@ async function main() {
       })
       // Example workflow: start with Analyst, then Oracle, then Degen, then end
       .addEdge("__start__", "Analyst")
-      .addEdge("Analyst", "Oracle")
-      .addEdge("Oracle", "Degen")
+      .addEdge("__start__", "Oracle")
+      .addEdge("__start__", "Degen")
+      .addEdge("Analyst", "__end__")
+      .addEdge("Oracle", "__end__")
       .addEdge("Degen", "__end__");
   });
   

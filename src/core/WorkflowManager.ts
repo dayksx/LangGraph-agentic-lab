@@ -31,10 +31,10 @@ export class WorkflowManager {
   }
   
   async processMessage(message: BaseMessage) {
-    
     const app = this.workflow.compile();
-    const result = await app.invoke({ messages: [message] });
-    console.log('Workflow result:', result);
+    const result = await app.invoke({ 
+      messages: [message]
+    });
     
     return result.messages[result.messages.length - 1];
   }
@@ -48,4 +48,7 @@ export class WorkflowManager {
   getAgent(name: string): Agent | undefined {
     return this.agents.get(name);
   }
-} 
+}
+
+// Export the state type for use in other files
+export type AgentStateType = typeof MessagesAnnotation.State; 
