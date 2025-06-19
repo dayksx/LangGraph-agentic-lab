@@ -1,6 +1,7 @@
 import { Plugin, PluginConfig } from './Plugin';
 import { DynamicTool } from '@langchain/core/tools';
 import { z } from 'zod';
+import { privateKeyToAccount } from 'viem/accounts';
 
 // Address validation function
 const isValidEthereumAddress = (address: string): boolean => {
@@ -28,13 +29,27 @@ export class AttestationPlugin implements Plugin {
     public tools: DynamicTool[] = [
         new DynamicTool({
             name: "issue_attestation",
-            description: "Issue an attestation for a subject using Verax on Linea Sepolia testnet. Input should be a JSON string with subject, scope, and isTrustworthy fields.",
+            description: "Issue an attestation for a subject using onchain attestation service. Input should be a claim about a specific subject identified by an Ethereum address",
             func: async (input: string) => {
                 try {
                     console.log("> input: ", input);
-                    const { subject, scope, isTrustworthy } = JSON.parse(input);
+                    
+                    // Parse plain text input
+                    const parts = input.trim().split(/\s+/);
+                    if (parts.length < 3) {
+                        throw new Error('Input must contain at least 3 parts: subject_address scope isTrustworthy. Example: "0x1234...abcd ENS true"');
+                    }
+                    
+                    const subject = parts[0];
+                    const isTrustworthy = parts[parts.length - 1]; // Last part is isTrustworthy
+                    const scope = parts.slice(1, -1).join(' '); // Everything in between is scope
+                    
+                    console.log("> subject address: ", subject);
+                    console.log("> subject length: ", subject.length);
+                    console.log("> subject format check: ", /^0x[a-fA-F0-9]{40}$/.test(subject));
+                    
                     const schemaId = process.env.CNS_VERAX_SCHEMA_ID as `0x${string}`;
-                    const portalAddress = process.env.PORTAL_ADDRESS as `0x${string}`;
+                    const portalAddress = process.env.CNS_VERAX_PORTAL_ID as `0x${string}`;
 
                     if (!schemaId) {
                         throw new Error('CNS_VERAX_SCHEMA_ID environment variable is not set');
@@ -45,7 +60,7 @@ export class AttestationPlugin implements Plugin {
                     }
 
                     if (!isValidEthereumAddress(subject)) {
-                        throw new Error('Invalid subject address format. Address must be 42 characters long (including 0x prefix) and contain only hexadecimal characters.');
+                        throw new Error(`Invalid subject address format: "${subject}". Address must be 42 characters long (including 0x prefix) and contain only hexadecimal characters (0-9, a-f, A-F). Current length: ${subject.length}`);
                     }
 
                     // Normalize subject address
@@ -91,10 +106,20 @@ export class AttestationPlugin implements Plugin {
             const { createRequire } = await import('module');
             const require = createRequire(import.meta.url);
             const { VeraxSdk } = require('@verax-attestation-registry/verax-sdk');
+            
+            const privateKey = process.env.PRIVATE_KEY as `0x${string}`;
+            if (!privateKey) {
+                throw new Error('PRIVATE_KEY environment variable is not set');
+            }
+
+            // Create account using viem for debugging
+            const account = privateKeyToAccount(privateKey);
+            console.log("> Account address: ", account.address);
+
             this.veraxSdk = new VeraxSdk(
                 VeraxSdk.DEFAULT_LINEA_SEPOLIA,
                 undefined,
-                process.env.EVM_PRIVATE_KEY as `0x${string}`
+                privateKey
             );
         } catch (error) {
             console.error('Failed to initialize Verax SDK:', error);

@@ -5,12 +5,6 @@ import { Plugin } from './plugins/Plugin.js';
 import { AppConfig, defaultConfig } from './config/config.js';
 import { SearchPlugin } from './plugins/SearchPlugin.js';
 import { TerminalClient } from './clients/TerminalClient.js';
-import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
-import { ChatOpenAI } from "@langchain/openai";
-import { MemorySaver } from "@langchain/langgraph";
-import { HumanMessage, BaseMessage } from "@langchain/core/messages";
-import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { DynamicTool, tool } from "@langchain/core/tools";
 import { ERC20Plugin } from './plugins/ERC20Plugin.js';
 import { StartupEvaluationPlugin } from './plugins/StartupEvaluationPlugin.js';
 import { AttestationPlugin } from './plugins/AttestationPlugin.js';
@@ -77,7 +71,7 @@ async function main() {
   const platform = new AgenticPlatform();
   
   // Register agents
-  await platform.registerAgent("curator", {
+  await platform.registerAgent("analyst", {
     modelName: "gpt-4",
     temperature: 0.7,
     tools: []
@@ -89,7 +83,7 @@ async function main() {
     tools: []
   });
   
-  await platform.registerAgent("consultant", {
+  await platform.registerAgent("oracle", {
     modelName: "gpt-4",
     temperature: 0.7,
     tools: []
@@ -97,17 +91,18 @@ async function main() {
   
   // Register plugins for specific agents
   await Promise.all([
-    platform.registerPluginForAgent("curator", new StartupEvaluationPlugin()),
+    platform.registerPluginForAgent("analyst", new StartupEvaluationPlugin()),
     platform.registerPluginForAgent("degen", new ERC20Plugin()),
-    platform.registerPluginForAgent("consultant", new SearchPlugin())
+    platform.registerPluginForAgent("degen", new AttestationPlugin()),
+    platform.registerPluginForAgent("oracle", new SearchPlugin())
   ]);
   
   // Define the workflow
   await platform.defineWorkflow((graph) => {
     graph
-      .addNode("Curator", async (state) => {
-        const agent = platform.getAgent("curator");
-        if (!agent) throw new Error("Curator agent not found");
+      .addNode("Analyst", async (state) => {
+        const agent = platform.getAgent("analyst");
+        if (!agent) throw new Error("Analyst agent not found");
         const messages = Array.isArray(state.messages) ? state.messages : [state.messages];
         const response = await agent.processMessage(messages);
         return { messages: [response] };
@@ -119,17 +114,17 @@ async function main() {
         const response = await agent.processMessage(messages);
         return { messages: [response] };
       })
-      .addNode("Consultant", async (state) => {
-        const agent = platform.getAgent("consultant");
-        if (!agent) throw new Error("Consultant agent not found");
+      .addNode("Oracle", async (state) => {
+        const agent = platform.getAgent("oracle");
+        if (!agent) throw new Error("Oracle agent not found");
         const messages = Array.isArray(state.messages) ? state.messages : [state.messages];
         const response = await agent.processMessage(messages);
         return { messages: [response] };
       })
-      // Example workflow: start with Curator, then Consultant, then Degen, then end
-      .addEdge("__start__", "Curator")
-      .addEdge("Curator", "Consultant")
-      .addEdge("Consultant", "Degen")
+      // Example workflow: start with Analyst, then Oracle, then Degen, then end
+      .addEdge("__start__", "Analyst")
+      .addEdge("Analyst", "Oracle")
+      .addEdge("Oracle", "Degen")
       .addEdge("Degen", "__end__");
   });
   

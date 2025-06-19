@@ -31,8 +31,6 @@ export class WorkflowManager {
   }
   
   async processMessage(message: BaseMessage) {
-    console.log('Processing message:', message.content);
-    console.log('Number of agents:', this.agents.size);
     
     const app = this.workflow.compile();
     const result = await app.invoke({ messages: [message] });
