@@ -86,13 +86,20 @@ export class AttestationPlugin implements Plugin {
     ];
 
     public async initialize(): Promise<void> {
-        // Initialize Verax SDK using require for CommonJS module
-        const { VeraxSdk } = await import('@verax-attestation-registry/verax-sdk');
-        this.veraxSdk = new VeraxSdk(
-            VeraxSdk.DEFAULT_LINEA_SEPOLIA,
-            undefined,
-            process.env.EVM_PRIVATE_KEY as `0x${string}`
-        );
+        // Initialize Verax SDK using createRequire to handle CommonJS/ESM conflict
+        try {
+            const { createRequire } = await import('module');
+            const require = createRequire(import.meta.url);
+            const { VeraxSdk } = require('@verax-attestation-registry/verax-sdk');
+            this.veraxSdk = new VeraxSdk(
+                VeraxSdk.DEFAULT_LINEA_SEPOLIA,
+                undefined,
+                process.env.EVM_PRIVATE_KEY as `0x${string}`
+            );
+        } catch (error) {
+            console.error('Failed to initialize Verax SDK:', error);
+            throw error;
+        }
     }
 
     public async cleanup(): Promise<void> {
