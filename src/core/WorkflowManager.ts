@@ -1,15 +1,27 @@
-import { StateGraph, MessagesAnnotation } from "@langchain/langgraph";
+import { StateGraph, MessagesAnnotation, Annotation } from "@langchain/langgraph";
 import { BaseMessage } from "@langchain/core/messages";
 import { Agent } from "./Agent.js";
 import { AgentConfig } from "./Agent.js";
 import { Plugin } from "../plugins/Plugin.js";
 
+// Define custom state schema with selectedAgent
+const AgentState = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: (x, y) => x.concat(y),
+    default: () => [],
+  }),
+  selectedAgent: Annotation<string>({
+    reducer: (x, y) => y ?? x ?? "oracle",
+    default: () => "oracle",
+  }),
+});
+
 export class WorkflowManager {
   private agents: Map<string, Agent> = new Map();
-  private workflow: StateGraph<typeof MessagesAnnotation.State>;
+  private workflow: StateGraph<typeof AgentState.State>;
   
   constructor() {
-    this.workflow = new StateGraph(MessagesAnnotation);
+    this.workflow = new StateGraph(AgentState);
   }
   
   async addAgent(name: string, config: AgentConfig): Promise<Agent> {
@@ -26,14 +38,15 @@ export class WorkflowManager {
     await agent.registerPlugin(plugin);
   }
   
-  defineWorkflow(workflowDefinition: (graph: StateGraph<typeof MessagesAnnotation.State>) => void): void {
+  defineWorkflow(workflowDefinition: (graph: StateGraph<any>) => void): void {
     workflowDefinition(this.workflow);
   }
   
   async processMessage(message: BaseMessage) {
     const app = this.workflow.compile();
     const result = await app.invoke({ 
-      messages: [message]
+      messages: [message],
+      selectedAgent: "oracle"
     });
     
     return result.messages[result.messages.length - 1];

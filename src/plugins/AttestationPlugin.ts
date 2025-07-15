@@ -37,7 +37,7 @@ export class AttestationPlugin implements Plugin {
                     // Parse plain text input
                     const parts = input.trim().split(/\s+/);
                     if (parts.length < 3) {
-                        throw new Error('Input must contain at least 3 parts: subject_address scope isTrustworthy. Example: "0x1234...abcd ENS true"');
+                        throw new Error('Input must contain at least 3 parts: subject_address scope isTrustworthy. Example: "0x1234...abcd ENS true: '+ parts.join(' '));
                     }
                     
                     const subject = parts[0];

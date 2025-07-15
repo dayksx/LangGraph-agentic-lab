@@ -8,7 +8,14 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "node --loader ts-node/esm src/index.ts",
-    "test": "jest"
+    "test": "jest",
+    "mcp:simple": "node dist/examples/mcp_simple_example.js",
+    "mcp:agent": "node dist/examples/mcp_agent_example.js",
+    "mcp:multi": "node dist/examples/mcp_multi_server_example.js",
+    "mcp:platform": "node dist/examples/mcp_agentic_platform_example.js",
+    "mcp:minimal": "node dist/examples/mcp_minimal_agentic_platform.js",
+    "mcp:setup": "cd mcp_servers && pip install -r requirements.txt",
+    "coordinator": "node dist/examples/coordinator_agent.js"
   },
   "keywords": [],
   "author": "dayksx",
@@ -18,6 +25,7 @@
     "@langchain/community": "^0.3.46",
     "@langchain/core": "^0.3.58",
     "@langchain/langgraph": "^0.3.3",
+    "@langchain/mcp-adapters": "^0.5.3",
     "@langchain/openai": "^0.5.13",
     "@verax-attestation-registry/verax-sdk": "2.4.0",
     "dotenv": "^16.4.1",
