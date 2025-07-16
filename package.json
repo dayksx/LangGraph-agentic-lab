@@ -15,7 +15,10 @@
     "mcp:platform": "node dist/examples/mcp_agentic_platform_example.js",
     "mcp:minimal": "node dist/examples/mcp_minimal_agentic_platform.js",
     "mcp:setup": "cd mcp_servers && pip install -r requirements.txt",
-    "coordinator": "node dist/examples/coordinator_agent.js"
+    "coordinator": "node dist/examples/coordinator_agent.js",
+    "telegram": "node dist/examples/telegram_example.js",
+    "telegram:dev": "node --loader ts-node/esm examples/telegram_example.ts",
+    "telegram:test": "node --loader ts-node/esm examples/test_telegram_session.ts"
   },
   "keywords": [],
   "author": "dayksx",

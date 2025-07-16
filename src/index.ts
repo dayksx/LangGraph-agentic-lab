@@ -6,9 +6,11 @@ import { AppConfig, defaultConfig } from './config/config.js';
 import { agentPersonas } from './config/personas.js';
 import { SearchPlugin } from './plugins/SearchPlugin.js';
 import { TerminalClient } from './clients/TerminalClient.js';
+import { TelegramClient } from './clients/TelegramClient.js';
 import { ERC20Plugin } from './plugins/ERC20Plugin.js';
 import { StartupEvaluationPlugin } from './plugins/StartupEvaluationPlugin.js';
 import { AttestationPlugin } from './plugins/AttestationPlugin.js';
+import { MCPPlugin, MCPPluginFactory } from './plugins/MCPPlugin.js';
 import { WorkflowManager } from './core/WorkflowManager.js';
 import { StateGraph } from '@langchain/langgraph';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
@@ -37,12 +39,12 @@ export class AgenticPlatform {
       Available agents:
       - "oracle": For general knowledge questions, searches, research, and broad inquiries
       - "analyst": For financial analysis, startup evaluation, market research, and data-driven insights
-      - "degen": For crypto trading, onchain transactions, token analysis, and high-risk opportunities
+      - "degen": For token transfers, onchain attestation issuance, basically any onchain reads or writes
 
       Routing guidelines:
       - If the request involves general knowledge, searches, or broad questions → "oracle"
       - If the request involves financial analysis, startup evaluation, or market research → "analyst"  
-      - If the request involves crypto trading, onchain transactions, or token analysis → "degen"
+      - If the request involves any onchain activity, such as token transfer, attestation issuance, fetching onchain data (e.g. EFP, ENS), or token analysis → "degen"
       
       Respond with ONLY one of: "oracle", "analyst", or "degen". No explanations or additional text.`],
       new MessagesPlaceholder("messages"),
@@ -74,6 +76,12 @@ export class AgenticPlatform {
     
     client.onMessage(async (message) => {
       const response = await this.workflowManager.processMessage(message);
+      
+      // Preserve metadata from the original message to the response
+      if ((message as any).metadata) {
+        (response as any).metadata = (message as any).metadata;
+      }
+      
       await client.sendMessage(response);
     });
   }
@@ -203,12 +211,64 @@ async function main() {
     platform.registerPluginForAgent("degen", new AttestationPlugin()),
     platform.registerPluginForAgent("oracle", new SearchPlugin())
   ]);
+
+  // Register MCP plugins for different agents
+  // Example 1: Task management MCP for analyst agent
+  const taskManagementMCP = MCPPluginFactory.createTaskManagementPlugin();
+  await platform.registerPluginForAgent("analyst", taskManagementMCP);
+
+  // Example 2: Math MCP for oracle agent
+  const mathMCP = MCPPluginFactory.createMathPlugin();
+  await platform.registerPluginForAgent("oracle", mathMCP);
+
+  // Example 3: EFP MCP for degen agent (onchain info)
+  const efpMCP = MCPPluginFactory.createEFPPlugin();
+  await platform.registerPluginForAgent("degen", efpMCP);
+
+  // Example 4: Weather MCP for oracle agent (requires SSE server running)
+  // const weatherMCP = MCPPluginFactory.createWeatherPlugin();
+  // await platform.registerPluginForAgent("oracle", weatherMCP);
+
+  // Example 4: Custom MCP plugin with multiple servers
+  const customMCP = new MCPPlugin({
+    name: 'custom_mcp',
+    description: 'Custom MCP plugin with multiple servers',
+    servers: [
+      {
+        name: 'task_management',
+        command: 'python',
+        args: ['./mcp_servers/task_management_server.py'],
+        transport: 'stdio'
+      },
+      {
+        name: 'math',
+        command: 'python',
+        args: ['./mcp_servers/math_server.py'],
+        transport: 'stdio'
+      }
+    ]
+  });
+
+  
+  await platform.registerPluginForAgent("oracle", customMCP);
   
   // Define the coordinator workflow with intelligent routing
   await platform.defineCoordinatorWorkflow();
   
   // Register clients
   await platform.registerClient(new TerminalClient());
+  
+  // Register Telegram client (optional - requires TELEGRAM_BOT_TOKEN env var)
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    try {
+      await platform.registerClient(new TelegramClient());
+      console.log('✅ Telegram client registered successfully!');
+    } catch (error) {
+      console.warn('⚠️  Telegram client not registered:', error instanceof Error ? error.message : String(error));
+    }
+  } else {
+    console.log('ℹ️  Telegram client not registered - set TELEGRAM_BOT_TOKEN environment variable to enable');
+  }
   
   console.log("✅ Main Coordinator Agent setup complete!");
   console.log("💡 Try asking questions like:");
@@ -217,7 +277,14 @@ async function main() {
   console.log("  - 'Should I buy this token?' (→ Degen)");
   console.log("  - 'Search for information about AI trends' (→ Oracle)");
   console.log("  - 'Evaluate the market potential of this project' (→ Analyst)");
-  console.log("  - 'How do I make an onchain transaction?' (→ Degen)\n");
+  console.log("  - 'How do I make an onchain transaction?' (→ Degen)");
+  console.log("  - 'Create a task: Build a web app' (→ Analyst via MCP)");
+  console.log("  - 'Get project statistics' (→ Oracle via MCP)");
+  console.log("  - 'Generate task suggestions for mobile app' (→ Analyst via MCP)");
+  console.log("  - 'Calculate 15 * 23' (→ Oracle via Math MCP)");
+  console.log("  - 'What is the square root of 144?' (→ Oracle via Math MCP)");
+  console.log("  - 'What is the weather in Tokyo?' (→ Oracle via Weather MCP)");
+  console.log("  - 'EFP related queries' (→ Degen via EFP MCP)\n");
   
   await platform.start();
 }
