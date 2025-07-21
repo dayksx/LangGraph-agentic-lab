@@ -2,6 +2,9 @@ import { Plugin, PluginConfig } from './Plugin';
 import { DynamicTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { privateKeyToAccount } from 'viem/accounts';
+import { createPublicClient, http } from 'viem';
+import { mainnet } from 'viem/chains';
+import { getEnsAddress } from 'viem/ens';
 
 // Address validation function
 const isValidEthereumAddress = (address: string): boolean => {
@@ -13,8 +16,47 @@ const normalizeAddress = (address: string): string => {
     return address.toLowerCase();
 };
 
+// Resolve ENS name to Ethereum address
+const resolveEnsName = async (ensName: string, publicClient: any): Promise<string> => {
+    try {
+        // Check if it's already an Ethereum address
+        if (isValidEthereumAddress(ensName)) {
+            return normalizeAddress(ensName);
+        }
+        
+        // Check if it looks like an ENS name (contains .eth)
+        if (ensName.includes('.eth') || ensName.includes('.xyz') || ensName.includes('.crypto')) {
+            console.log(`🔍 Resolving ENS name: ${ensName}`);
+            
+            // Create a mainnet client for ENS resolution
+            const mainnetClient = createPublicClient({
+                chain: mainnet,
+                transport: http()
+            });
+            
+            const resolvedAddress = await getEnsAddress(mainnetClient, {
+                name: ensName
+            });
+            
+            if (resolvedAddress) {
+                console.log(`✅ Resolved ${ensName} to ${resolvedAddress}`);
+                return normalizeAddress(resolvedAddress);
+            } else {
+                throw new Error(`Could not resolve ENS name: ${ensName}`);
+            }
+        }
+        
+        // If it's not an ENS name, assume it's an invalid address
+        throw new Error(`Invalid address or ENS name: ${ensName}`);
+    } catch (error: any) {
+        console.error(`❌ Error resolving ENS name ${ensName}:`, error.message);
+        throw new Error(`Failed to resolve ENS name "${ensName}": ${error.message}`);
+    }
+};
+
 export class AttestationPlugin implements Plugin {
     private veraxSdk: any; // We'll type this properly after dynamic import
+    private publicClient: any;
 
     public config: PluginConfig = {
         name: 'attestation',
@@ -23,26 +65,46 @@ export class AttestationPlugin implements Plugin {
     };
 
     constructor() {
-        // Initialize Verax SDK will be done in initialize()
+        // Initialize public client for ENS resolution
+        this.publicClient = createPublicClient({
+            chain: mainnet,
+            transport: http()
+        });
     }
 
     public tools: DynamicTool[] = [
         new DynamicTool({
             name: "issue_attestation",
-            description: "Issue an attestation for a subject using onchain attestation service. Input should be a claim about a specific subject identified by an Ethereum address",
+            description: "Issue an attestation for a subject using onchain attestation service. Input should be a claim about a specific subject identified by an Ethereum address or ENS name (e.g., 'vitalik.eth')",
             func: async (input: string) => {
                 try {
                     console.log("> input: ", input);
                     
-                    // Parse plain text input
-                    const parts = input.trim().split(/\s+/);
-                    if (parts.length < 3) {
-                        throw new Error('Input must contain at least 3 parts: subject_address scope isTrustworthy. Example: "0x1234...abcd ENS true: '+ parts.join(' '));
-                    }
+                    let subject: string;
+                    let scope: string;
+                    let isTrustworthy: string;
                     
-                    const subject = parts[0];
-                    const isTrustworthy = parts[parts.length - 1]; // Last part is isTrustworthy
-                    const scope = parts.slice(1, -1).join(' '); // Everything in between is scope
+                    // Try to parse as JSON first
+                    try {
+                        const jsonInput = JSON.parse(input);
+                        subject = jsonInput.subject || jsonInput.address;
+                        scope = jsonInput.scope;
+                        isTrustworthy = jsonInput.isTrustworthy?.toString();
+                        
+                        if (!subject || !scope || isTrustworthy === undefined) {
+                            throw new Error('JSON parsing failed - missing required fields');
+                        }
+                    } catch (jsonError) {
+                        // Fall back to plain text parsing
+                        const parts = input.trim().split(/\s+/);
+                        if (parts.length < 3) {
+                            throw new Error('Input must contain at least 3 parts: subject_address scope isTrustworthy. Example: "vitalik.eth ENS true" or JSON format: {"subject": "vitalik.eth", "scope": "ENS", "isTrustworthy": true}');
+                        }
+                        
+                        subject = parts[0];
+                        isTrustworthy = parts[parts.length - 1]; // Last part is isTrustworthy
+                        scope = parts.slice(1, -1).join(' '); // Everything in between is scope
+                    }
                     
                     console.log("> subject address: ", subject);
                     console.log("> subject length: ", subject.length);
@@ -59,12 +121,15 @@ export class AttestationPlugin implements Plugin {
                         throw new Error('PORTAL_ADDRESS environment variable is not set');
                     }
 
-                    if (!isValidEthereumAddress(subject)) {
-                        throw new Error(`Invalid subject address format: "${subject}". Address must be 42 characters long (including 0x prefix) and contain only hexadecimal characters (0-9, a-f, A-F). Current length: ${subject.length}`);
+                    // Resolve ENS name to Ethereum address if needed
+                    const resolvedSubject = await resolveEnsName(subject, this.publicClient);
+
+                    if (!isValidEthereumAddress(resolvedSubject)) {
+                        throw new Error(`Invalid subject address format: "${resolvedSubject}". Address must be 42 characters long (including 0x prefix) and contain only hexadecimal characters (0-9, a-f, A-F). Current length: ${resolvedSubject.length}`);
                     }
 
                     // Normalize subject address
-                    const normalizedSubject = normalizeAddress(subject);
+                    const normalizedSubject = normalizeAddress(resolvedSubject);
                     
                     // Convert isTrustworthy to boolean if it's a string
                     const isTrustworthyBool = typeof isTrustworthy === 'string' 

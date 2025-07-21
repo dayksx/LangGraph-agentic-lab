@@ -18,7 +18,15 @@
     "coordinator": "node dist/examples/coordinator_agent.js",
     "telegram": "node dist/examples/telegram_example.js",
     "telegram:dev": "node --loader ts-node/esm examples/telegram_example.ts",
-    "telegram:test": "node --loader ts-node/esm examples/test_telegram_session.ts"
+    "telegram:test": "node --loader ts-node/esm examples/test_telegram_session.ts",
+    "events": "node dist/examples/event_triggers_example.js",
+    "events:dev": "node --loader ts-node/esm examples/event_triggers_example.ts",
+    "realtime": "node dist/examples/realtime_event_processor.js",
+    "realtime:dev": "node --loader ts-node/esm examples/realtime_event_processor.ts",
+    "sourcing": "node dist/examples/event_sourcing_example.js",
+    "sourcing:dev": "node --loader ts-node/esm examples/event_sourcing_example.ts",
+    "event-sources": "node dist/examples/event_sources_example.js",
+    "event-sources:dev": "node --loader ts-node/esm examples/event_sources_example.ts"
   },
   "keywords": [],
   "author": "dayksx",

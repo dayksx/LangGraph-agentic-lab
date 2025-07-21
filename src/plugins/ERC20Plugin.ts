@@ -2,7 +2,8 @@ import { Plugin, PluginConfig } from './Plugin';
 import { DynamicTool } from '@langchain/core/tools';
 import { createPublicClient, createWalletClient, http, parseEther, formatEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { lineaSepolia } from 'viem/chains';
+import { lineaSepolia, mainnet } from 'viem/chains';
+import { getEnsAddress } from 'viem/ens';
 import { z } from 'zod';
 
 // Address validation function
@@ -16,6 +17,44 @@ const isValidEthereumAddress = (address: string): boolean => {
 // Normalize address to lowercase for consistency
 const normalizeAddress = (address: string): string => {
     return address.toLowerCase();
+};
+
+// Resolve ENS name to Ethereum address
+const resolveEnsName = async (ensName: string, publicClient: any): Promise<string> => {
+    try {
+        // Check if it's already an Ethereum address
+        if (isValidEthereumAddress(ensName)) {
+            return normalizeAddress(ensName);
+        }
+        
+        // Check if it looks like an ENS name (contains .eth)
+        if (ensName.includes('.eth') || ensName.includes('.xyz') || ensName.includes('.crypto')) {
+            console.log(`🔍 Resolving ENS name: ${ensName}`);
+            
+            // Create a mainnet client for ENS resolution
+            const mainnetClient = createPublicClient({
+                chain: mainnet,
+                transport: http()
+            });
+            
+            const resolvedAddress = await getEnsAddress(mainnetClient, {
+                name: ensName
+            });
+            
+            if (resolvedAddress) {
+                console.log(`✅ Resolved ${ensName} to ${resolvedAddress}`);
+                return normalizeAddress(resolvedAddress);
+            } else {
+                throw new Error(`Could not resolve ENS name: ${ensName}`);
+            }
+        }
+        
+        // If it's not an ENS name, assume it's an invalid address
+        throw new Error(`Invalid address or ENS name: ${ensName}`);
+    } catch (error: any) {
+        console.error(`❌ Error resolving ENS name ${ensName}:`, error.message);
+        throw new Error(`Failed to resolve ENS name "${ensName}": ${error.message}`);
+    }
 };
 
 // ERC20 ABI with only the functions we need
@@ -74,27 +113,42 @@ export class ERC20Plugin implements Plugin {
     public tools: DynamicTool[] = [
         new DynamicTool({
             name: "transfer_erc20",
-            description: "Transfer ERC20 tokens to a specified address on Linea Sepolia testnet. Input should be a JSON string with to and amount fields.",
+            description: "Transfer ERC20 tokens to a specified address or ENS name on Linea Sepolia testnet. Input should be a JSON string with to and amount fields. Supports ENS names like 'vitalik.eth'.",
             func: async (input: string) => {
                 try {
                     console.log("> input: ", input);
-                    const { to, amount } = JSON.parse(input);
+                    
+                    // Handle undefined or null input
+                    if (!input) {
+                        throw new Error('Input is required. Please provide a JSON string with "to" and "amount" fields. Example: {"to": "vitalik.eth", "amount": "1"}');
+                    }
+                    
+                    let parsedInput;
+                    try {
+                        parsedInput = JSON.parse(input);
+                    } catch (parseError) {
+                        throw new Error(`Invalid JSON input: ${input}. Please provide valid JSON with "to" and "amount" fields. Example: {"to": "vitalik.eth", "amount": "1"}`);
+                    }
+                    
+                    const { to, amount } = parsedInput;
+                    
+                    if (!to || !amount) {
+                        throw new Error('Both "to" and "amount" fields are required. Please provide a JSON string with both fields. Example: {"to": "vitalik.eth", "amount": "1"}');
+                    }
                     const tokenAddress = process.env.CNS_TOKEN_ADDRESS;
                     
                     if (!tokenAddress) {
                         throw new Error('CNS_TOKEN_ADDRESS environment variable is not set');
                     }
 
-                    if (!isValidEthereumAddress(to)) {
-                        throw new Error('Invalid recipient address format. Address must be 42 characters long (including 0x prefix) and contain only hexadecimal characters.');
-                    }
+                    // Resolve ENS name to Ethereum address if needed
+                    const resolvedTo = await resolveEnsName(to, this.publicClient);
 
                     if (!isValidEthereumAddress(tokenAddress)) {
                         throw new Error('Invalid token address format. Address must be 42 characters long (including 0x prefix) and contain only hexadecimal characters.');
                     }
 
-                    // Normalize addresses to lowercase
-                    const normalizedTo = normalizeAddress(to);
+                    // Normalize token address to lowercase
                     const normalizedTokenAddress = normalizeAddress(tokenAddress);
                     
                     // Get token decimals
@@ -113,7 +167,7 @@ export class ERC20Plugin implements Plugin {
                         address: normalizedTokenAddress as `0x${string}`,
                         abi: ERC20_ABI,
                         functionName: 'transfer',
-                        args: [normalizedTo as `0x${string}`, amountWithDecimals]
+                        args: [resolvedTo as `0x${string}`, amountWithDecimals]
                     });
                     
                     // Wait for transaction to be mined
@@ -128,35 +182,50 @@ export class ERC20Plugin implements Plugin {
         }),
         new DynamicTool({
             name: "get_erc20_balance",
-            description: "Get ERC20 token balance for an address on Linea Sepolia testnet. Input should be a JSON string with address field.",
+            description: "Get ERC20 token balance for an address or ENS name on Linea Sepolia testnet. Input should be a JSON string with address field. Supports ENS names like 'vitalik.eth'.",
             func: async (input: string) => {
                 try {
                     console.log("> input: ", input);
-                    const { address } = JSON.parse(input);
+                    
+                    // Handle undefined or null input
+                    if (!input) {
+                        throw new Error('Input is required. Please provide a JSON string with "address" field. Example: {"address": "vitalik.eth"}');
+                    }
+                    
+                    let parsedInput;
+                    try {
+                        parsedInput = JSON.parse(input);
+                    } catch (parseError) {
+                        throw new Error(`Invalid JSON input: ${input}. Please provide valid JSON with "address" field. Example: {"address": "vitalik.eth"}`);
+                    }
+                    
+                    const { address } = parsedInput;
+                    
+                    if (!address) {
+                        throw new Error('Address field is required. Please provide a JSON string with "address" field. Example: {"address": "vitalik.eth"}');
+                    }
                     const tokenAddress = process.env.CNS_TOKEN_ADDRESS;
                     
                     if (!tokenAddress) {
                         throw new Error('CNS_TOKEN_ADDRESS environment variable is not set');
                     }
                     
-                    if (!isValidEthereumAddress(address)) {
-                        throw new Error('Invalid address format. Address must be 42 characters long (including 0x prefix) and contain only hexadecimal characters.');
-                    }
+                    // Resolve ENS name to Ethereum address if needed
+                    const resolvedAddress = await resolveEnsName(address, this.publicClient);
 
                     if (!isValidEthereumAddress(tokenAddress)) {
                         throw new Error('Invalid token address format. Address must be 42 characters long (including 0x prefix) and contain only hexadecimal characters.');
                     }
 
-                    // Normalize addresses to lowercase
-                    const normalizedAddress = normalizeAddress(address);
+                    // Normalize token address to lowercase
                     const normalizedTokenAddress = normalizeAddress(tokenAddress);
                     
                     const balance = await this.publicClient.readContract({
                         address: normalizedTokenAddress as `0x${string}`,
                         abi: ERC20_ABI,
                         functionName: 'balanceOf',
-                        args: [normalizedAddress as `0x${string}`],
-                        account: normalizedAddress as `0x${string}`
+                        args: [resolvedAddress as `0x${string}`],
+                        account: resolvedAddress as `0x${string}`
                     });
                     
                     return `Balance: ${formatEther(balance)} tokens`;

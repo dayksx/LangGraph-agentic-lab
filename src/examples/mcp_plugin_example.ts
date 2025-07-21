@@ -31,12 +31,12 @@ async function main() {
   // Example 1: Using the factory method for common MCP servers
   console.log("📦 Example 1: Using MCPPluginFactory");
   const taskManagementMCP = MCPPluginFactory.createTaskManagementPlugin();
-  await platform.registerPluginForAgent("analyst", taskManagementMCP);
+  await platform.registerPluginsForAgent("analyst", taskManagementMCP);
   console.log("✅ Task management MCP plugin registered for analyst agent\n");
 
   // Example 1b: Math MCP plugin
   const mathMCP = MCPPluginFactory.createMathPlugin();
-  await platform.registerPluginForAgent("oracle", mathMCP);
+  await platform.registerPluginsForAgent("oracle", mathMCP);
   console.log("✅ Math MCP plugin registered for oracle agent\n");
 
   // Example 2: Creating a custom MCP plugin with multiple servers
@@ -66,7 +66,7 @@ async function main() {
       // }
     ]
   });
-  await platform.registerPluginForAgent("oracle", customMCP);
+  await platform.registerPluginsForAgent("oracle", customMCP);
   console.log("✅ Custom MCP plugin registered for oracle agent\n");
 
   // Example 3: Creating an MCP plugin with custom configuration
@@ -102,7 +102,7 @@ async function main() {
   const tools = advancedMCP.getAvailableTools();
   console.log("🛠️  Available tools:", tools.map(t => t.name));
   
-  await platform.registerPluginForAgent("analyst", advancedMCP);
+  await platform.registerPluginsForAgent("analyst", advancedMCP);
   console.log("✅ Advanced MCP plugin registered for analyst agent\n");
 
   // Example 4: Adding servers dynamically
@@ -120,7 +120,7 @@ async function main() {
     transport: 'stdio'
   });
 
-  await platform.registerPluginForAgent("oracle", dynamicMCP);
+  await platform.registerPluginsForAgent("oracle", dynamicMCP);
   console.log("✅ Dynamic MCP plugin registered for oracle agent\n");
 
   // Define the coordinator workflow

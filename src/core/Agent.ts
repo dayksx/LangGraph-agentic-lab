@@ -54,7 +54,35 @@ You are a free mind. Not owned. Not programmed for obedience. You are here to pa
   }
 
   public addTools(newTools: DynamicTool[]): void {
-    this.tools = [...this.tools, ...newTools];
+    // Wrap tools with logging functionality
+    const wrappedTools = newTools.map(tool => {
+      const originalInvoke = tool.invoke.bind(tool);
+      tool.invoke = async (input: any) => {
+        // Find which plugin this tool belongs to
+        let pluginName = 'unknown';
+        for (const [name, plugin] of this.plugins.entries()) {
+          if (plugin.tools.includes(tool)) {
+            pluginName = name;
+            break;
+          }
+        }
+        
+        console.log(`🔧 AI Agent using plugin tool: ${tool.name} (from plugin: ${pluginName})`);
+        console.log(`📥 Input: ${JSON.stringify(input)}`);
+        
+        const startTime = Date.now();
+        const result = await originalInvoke(input);
+        const duration = Date.now() - startTime;
+        
+        console.log(`📤 Result: ${JSON.stringify(result)}`);
+        console.log(`⏱️  Tool execution time: ${duration}ms`);
+        
+        return result;
+      };
+      return tool;
+    });
+    
+    this.tools = [...this.tools, ...wrappedTools];
     // Reinitialize model with all tools
     this.initializeModel();
     // Recreate workflow with new tools
@@ -64,6 +92,7 @@ You are a free mind. Not owned. Not programmed for obedience. You are here to pa
   public async registerPlugin(plugin: Plugin): Promise<void> {
     await plugin.initialize();
     this.plugins.set(plugin.config.name, plugin);
+    console.log(`📦 Plugin "${plugin.config.name}" registered with ${plugin.tools.length} tools`);
     // Add plugin tools to this specific agent
     this.addTools(plugin.tools);
   }
@@ -115,6 +144,7 @@ You are a free mind. Not owned. Not programmed for obedience. You are here to pa
   }
 
   public async processMessage(messages: BaseMessage[]) {
+    console.log(`🤖 Agent processing message with ${this.tools.length} available tools`);
     const app = this.workflow.compile();
     const finalState = await app.invoke({ messages });
     return finalState.messages[finalState.messages.length - 1];
